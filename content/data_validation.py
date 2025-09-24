@@ -1,8 +1,8 @@
 # content/data_validation.py
 
 import streamlit as st
-from backend.data_io import parse_baseline_text
-from backend.loop_check import check_all_loops
+from backend.data_parser.data_io import parse_baseline_text
+from backend.validation.loop_check import check_all_loops
 from utils.ui_helpers import setup_navigation_buttons
 
 def data_validation_page():
@@ -84,7 +84,7 @@ def run_validation_logic(threshold, go_next=False):
     """
     try:
         st.session_state.baseline_list, st.session_state.unq_stations = parse_baseline_text(st.session_state.baseline_text)
-        ok, msg, _ = check_all_loops(st.session_state.baseline_list, threshold=threshold)
+        ok, msg, _ = check_all_loops(st.session_state.baseline_list, threshold=threshold, dimension = st.session_state.dimension)
         st.session_state.loop_ok = ok
         st.session_state.loop_msg = msg
         st.session_state["steps_done"]["Data validation"] = True

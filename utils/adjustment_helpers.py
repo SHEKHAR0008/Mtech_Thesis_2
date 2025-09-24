@@ -2,7 +2,7 @@
 
 import streamlit as st
 import numpy as np
-
+from scipy.stats import norm
 
 def hard_constraint_ui():
     """
@@ -241,3 +241,36 @@ def preview_matrix(name, mat, limit=25):
     st.write(f"**{name}** (shape={arr.shape})")
     st.code(str(arr[:limit, :limit]) + (
         "\n...[Truncated]" if arr.shape[0] > limit or arr.shape[1] > limit else ""))
+
+
+def get_rejection_level_from_alpha(alpha: float) -> float:
+    """
+    Calculates the critical value (rejection level) from the standard normal
+    distribution for a given two-tailed significance level (alpha).
+
+    It uses a lookup table for common values for speed and provides a direct
+    calculation for other values.
+
+    Args:
+        alpha (float): The significance level (e.g., 0.05, 0.01, 0.001).
+
+    Returns:
+        float: The corresponding critical value (e.g., 1.96, 2.58, 3.29).
+    """
+    # Dictionary for common, pre-calculated values
+    rejection_levels = {
+        0.10: 1.645,
+        0.05: 1.960,
+        0.02: 2.326,
+        0.01: 2.576,
+        0.0027: 3.000,  # Corresponds to the "3-sigma" rule
+        0.001: 3.291
+    }
+
+    # Return from dictionary if available, otherwise calculate it
+    if alpha in rejection_levels:
+        return rejection_levels[alpha]
+    else:
+        # For any other value, calculate it precisely using scipy.stats.norm
+        # We use alpha/2 because it's a two-tailed test.
+        return norm.ppf(1 - alpha / 2)

@@ -3,8 +3,8 @@
 import streamlit as st
 import io
 import os
-from backend.csv_result import export_adjustment_results_csv
-from backend.report import generate_adjustment_report_docx_pdf
+from backend.csv_report.csv_result import export_adjustment_results_excel
+from backend.csv_report.report import generate_adjustment_report_docx_pdf
 from backend.plots import generate_plots
 
 
@@ -20,10 +20,15 @@ def download_page():
 
     # Generate and cache CSVs on first entry to this page
     if "obs_buffer" not in st.session_state:
-        st.session_state.obs_buffer, st.session_state.params_buffer = export_adjustment_results_csv(
+        st.session_state.obs_buffer, st.session_state.params_buffer = export_adjustment_results_excel(
             st.session_state.final_results,
-            rejection_level=3.0,
-            geodetic_coords=None
+            st.session_state.outlier_results,
+            st.session_state.blunder_detection_method,
+            st.session_state.alpha,
+            st.session_state.beta_power,
+            rejection_level=st.session_state.rejection_level,
+            geodetic_coords=None,
+            initial_results= st.session_state.final_results,
         )
 
     # ---------------- CSV EXPORTS ----------------
@@ -81,7 +86,7 @@ def download_page():
     # Generate and cache the PDF/DOCX report
     if "report_buffer" not in st.session_state:
         try:
-            template_path = os.path.join(os.path.dirname(__file__), "../backend/Adju_my_report.docx")
+            template_path = os.path.join(os.path.dirname(__file__), "../backend/csv_report/Adju_my_report.docx")
 
             st.session_state.report_buffer = generate_adjustment_report_docx_pdf(
                 final_results=st.session_state.final_results,
@@ -90,6 +95,15 @@ def download_page():
                 soft_constraints=st.session_state.get("soft_constraints"),
                 vtpv_graph=st.session_state.get("vtpv_graph"),
                 chi_graph=st.session_state.get("chi_graph"),
+                error_ellipse = st.session_state.get("error_ellipse_plot"),
+                network_plot = st.session_state.get("network_plot"),
+                outlier_result = st.session_state.outlier_results,
+                blunder_detection_method =st.session_state.blunder_detection_method,
+                alpha = st.session_state.alpha,
+                beta_power = st.session_state.beta_power,
+                rejection_level = st.session_state.rejection_level,
+                geodetic_coords = None,
+                initial_results = st.session_state.final_results,
             )
         except Exception as e:
             st.error(f"Failed to generate report: {e}")

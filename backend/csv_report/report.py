@@ -3,6 +3,7 @@ from docx.shared import Inches
 import io, math
 from datetime import datetime
 import os
+import matplotlib.figure
 
 def format_number(num, sig=3):
     """Format numbers into scientific or fixed notation."""
@@ -28,7 +29,7 @@ def _to_image_bytes(img_obj, fmt="png"):
     """
     # Case 1: Matplotlib Figure
     try:
-        import matplotlib.figure
+
         if isinstance(img_obj, matplotlib.figure.Figure):
             buf = io.BytesIO()
             img_obj.savefig(buf, format=fmt, bbox_inches="tight")
@@ -59,7 +60,16 @@ def generate_adjustment_report_docx_pdf(
     soft_constraints=None,
     vtpv_graph=None,
     chi_graph=None,
-    weight_type="Unity/Full/Diagonal"
+    weight_type="Unity/Full/Diagonal",
+    error_ellipse = None ,
+    network_plot = None ,
+    outlier_result = None ,
+    blunder_detection_method = None ,
+    alpha = None ,
+    beta_power = None ,
+    rejection_level = None ,
+    geodetic_coords = None ,
+    initial_results = None ,
 ):
     """
     Generate Adjustment Report (DOCX buffer).

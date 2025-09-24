@@ -1,9 +1,7 @@
-import streamlit as st
-import plotly.io as pio  # Still needed for error_ellipse_plot download if applicable
-from backend.chi_square_plot import generate_chi_square_plot
-from backend.vtpv_plot import generate_vtpv_plot
-from backend.network_plot import generate_network_plot
-from backend.error_ellipse_plot import plot_interactive_error_ellipses
+from backend.visualization.chi_square_plot import generate_chi_square_plot
+from backend.visualization.vtpv_plot import generate_vtpv_plot
+from backend.visualization.network_plot import generate_network_plot
+from backend.visualization.error_ellipse_plot import plot_interactive_error_ellipses
 
 
 def generate_plots(final_results, dof, unq_stations, baseline_list, alpha=0.05):

@@ -2,11 +2,14 @@
 
 import streamlit as st
 import numpy as np
-from backend.observation_equation import build_observation_system
-from backend.initial_guess import initial_guess
-from backend.batch_adjustment import batch_adjustment
-from backend.apply_constraint_fn import apply_constraints
-from utils.adjustment_helpers import hard_constraint_ui, soft_constraint_ui, stringify_keys, preview_matrix
+from backend.adjustment.observation_equation import build_observation_system
+from backend.adjustment.initial_guess import initial_guess
+from backend.adjustment.batch_adjustment import batch_adjustment
+from backend.adjustment.apply_constraint_fn import apply_constraints
+from backend.adjustment.outlier_detection import iterative_outlier_detection
+from utils.adjustment_helpers import (hard_constraint_ui, soft_constraint_ui,
+                                      stringify_keys, preview_matrix,
+                                      get_rejection_level_from_alpha)
 
 
 def adjustment_page():
@@ -69,6 +72,45 @@ def adjustment_page():
         st.subheader("Phased Adjustment Settings")
         st.session_state.block_size = st.number_input("Block Size", value=20, step=1)
         st.info("Phased adjustment logic is not fully implemented in the provided code.")
+
+    with st.expander("🔬 Statistical Testing & Outlier Detection", expanded=True):
+        st.session_state.blunder_detection_method = st.selectbox(
+            "Blunder Detection Method", ["None", "Baarda Data Snooping", "Tau Test"],
+            index=["None", "Baarda Data Snooping", "Tau Test"].index(
+                st.session_state.get("blunder_detection_method", "None")),
+            help="Choose a statistical method to detect and remove outliers after the initial adjustment."
+        )
+        if st.session_state.blunder_detection_method == "Baarda Data Snooping":
+            st.markdown("###### Set Statistical Parameters")
+            col_alpha, col_beta, col_rejection = st.columns(3)
+            with col_alpha:
+                st.session_state.alpha = st.number_input(
+                    "Significance Level (α)", min_value=0.001, max_value=0.100,
+                    value=st.session_state.get("alpha", 0.001), step=0.001, format="%.3f",
+                    help="Probability of Type I error (rejecting a good observation). A common stringent value is 0.001."
+                )
+            with col_beta:
+                st.session_state.beta_power = st.number_input(
+                    "Desired Power of Test (1-β)", min_value=0.50, max_value=0.99,
+                    value=st.session_state.get("beta_power", 0.80), step=0.01, format="%.2f",
+                    help="Probability of correctly detecting a blunder. Used to analyze test sensitivity (e.g., MDB)."
+                )
+
+            # --- LOGIC TO CALCULATE AND STORE REJECTION LEVEL ---
+            # Call the helper function to get the rejection level
+            rejection_level = get_rejection_level_from_alpha(st.session_state.alpha)
+            # Store it in the session state so other functions can access it
+            st.session_state.rejection_level = rejection_level
+
+            with col_rejection:
+                st.metric(
+                    label="Rejection Level (k)",
+                    value=f"{rejection_level:.3f}",
+                    help="Calculated critical value. Standardized residuals greater than this will be flagged as outliers."
+                )
+
+        elif st.session_state.blunder_detection_method == "Tau Test":
+            st.info("The Tau Test is not yet implemented.")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -136,14 +178,13 @@ def adjustment_page():
 
 @st.cache_resource(show_spinner="Running adjustment...")
 def run_adjustment_logic(go_next=False):
-    # ... (rest of the adjustment logic as before) ...
     try:
         # Step 1: Build observation system
         obs_vec, equations, params, labels, P, n, u, dof = build_observation_system(
             st.session_state.baseline_list,
             weight_type=st.session_state.get("weight_matrix", "unity").lower()
         )
-
+        print("Initial")
         # Step 2: Apply constraints
         obs_vec, equations, P, labels, n, u, dof = apply_constraints(
             obs_vec, equations, params, P, labels,
@@ -151,6 +192,7 @@ def run_adjustment_logic(go_next=False):
             soft_constraints=st.session_state.get("soft_constraints", None),
             weight_type=st.session_state.weight_matrix.lower()
         )
+        print("Initaoal")
 
         # Step 3: Get initial guess
         values, X_hat, constants, params = initial_guess(
@@ -159,13 +201,20 @@ def run_adjustment_logic(go_next=False):
             hard_constraints=st.session_state.get("hard_constraints", None),
             soft_constraints=st.session_state.get("soft_constraints", None)
         )
-
+        print("Final")
         # Step 4: Run batch adjustment
         final_results, vtpv_values = batch_adjustment(
             obs_vec, equations, X_hat, values, constants, P, params, labels,
             apriori_reference_var=1, max_iterations=10, tolerance=1e-9,
             constraint_type=st.session_state.get("constraint_type", "No Constraint")
         )
+
+        # Step 5: Run outlier detection if asked
+        if st.session_state.blunder_detection_method == "Baarda Data Snooping":
+            outlier_results,vtpv_values = iterative_outlier_detection(
+                final_results, st.session_state.rejection_level, labels, params, force_pinv=True)
+
+            st.session_state.outlier_results = outlier_results
 
         st.session_state.final_results = final_results
         st.session_state.vtpv_values = vtpv_values

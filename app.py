@@ -18,14 +18,14 @@ from utils.ui_helpers import setup_navigation_buttons
 # ======================== Backend Imports and Error Handling ========================
 BACKEND_IMPORT_ERROR = None
 try:
-    from backend.data_io import parse_baseline_text
-    from backend.loop_check import check_all_loops
-    from backend.observation_equation import build_observation_system
-    from backend.initial_guess import initial_guess
-    from backend.batch_adjustment import batch_adjustment
-    from backend.apply_constraint_fn import apply_constraints
-    from backend.csv_result import export_adjustment_results_csv
-    from backend.report import generate_adjustment_report_docx_pdf
+    from backend.data_parser.data_io import parse_baseline_text
+    from backend.validation.loop_check import check_all_loops
+    from backend.adjustment.observation_equation import build_observation_system
+    from backend.adjustment.initial_guess import initial_guess
+    from backend.adjustment.batch_adjustment import batch_adjustment
+    from backend.adjustment.apply_constraint_fn import apply_constraints
+    from backend.csv_report.csv_result import export_adjustment_results_excel
+    from backend.csv_report.report import generate_adjustment_report_docx_pdf
 except Exception as e:
     BACKEND_IMPORT_ERROR = e
 if BACKEND_IMPORT_ERROR:
@@ -45,6 +45,7 @@ def init_state():
             "visualization": False,
             "Download": False,
         },
+        "outlier_results" : [],
         "dimension":None,
         "viewed_results": False, # New variable to track if results have been viewed
         "final_results" : None,

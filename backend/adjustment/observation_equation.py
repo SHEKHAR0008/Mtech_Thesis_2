@@ -84,6 +84,5 @@ def build_observation_system(baselines: List[Baseline], weight_type):
     N = n
     U = len(stations) * dim
     dof = N - U
-    # print(P)
 
     return obs_vec, equations, params, labels, P, N, U, dof
