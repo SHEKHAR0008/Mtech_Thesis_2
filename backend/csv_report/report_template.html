@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Adjustment Report</title>
+    <style>
+        /* Basic styles */
+        @page {
+            size: A4;
+            margin: 1in;
+            @bottom-center {
+                content: "Page " counter(page) " of " counter(pages);
+            }
+        }
+
+        /* Defines a new page style for landscape orientation */
+        @page landscape {
+            size: A4 landscape;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11pt;
+            line-height: 1.5;
+        }
+        .container {
+            width: 100%;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 5px;
+            margin-top: 25px;
+        }
+        h1 { font-size: 24pt; }
+        h2 { font-size: 18pt; }
+        h3 { font-size: 14pt; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #bdc3c7;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #ecf0f1;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .summary-table td:first-child {
+            font-weight: bold;
+            width: 40%;
+        }
+        pre {
+            background-color: #f5f5f5;
+            border: 1px solid #ccc;
+            padding: 10px;
+            font-family: Consolas, "Courier New", monospace;
+        }
+
+        .wide-pre {
+            white-space: pre; /* Prevents text from wrapping */
+            font-size: 8pt;   /* Smaller font to fit more data */
+        }
+
+        /* Class to apply the landscape page and force a page break */
+        .landscape-page {
+            page: landscape;
+            page-break-before: always;
+        }
+
+        .graph-container {
+            text-align: center;
+            margin-top: 20px;
+            page-break-inside: avoid;
+        }
+        .graph-container img {
+            max-width: 90%;
+            height: auto;
+        }
+        .page-break {
+            page-break-before: always;
+        }
+        /* Styles for Table of Contents */
+        .toc-list {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .toc-list li a {
+            text-decoration: none;
+            color: #3498db;
+            display: flex;
+            justify-content: space-between;
+        }
+        .toc-list li a::after {
+            content: leader('.') target-counter(attr(href), page);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Detail Adjustment Report</h1>
+            <p><strong>Prepared by:</strong> GeoNet Labs Co.</p>
+            <p><strong>Date:</strong> {{ curr_date }} | <strong>Time:</strong> {{ curr_time }}</p>
+        </header>
+
+        <main>
+            <nav>
+                <h2>Table of Contents</h2>
+                <ul class="toc-list">
+                    <li><a href="#summary">Executive Summary</a></li>
+                    <li><a href="#obs_eq">1. Observation Equations</a></li>
+                    <li><a href="#constraints">2. Constraints</a></li>
+                    <li><a href="#obs_results">3. Observation Results</a></li>
+                    <li><a href="#residuals">4. Residuals</a></li>
+                    <li><a href="#params">5. Parameters</a></li>
+                    <li><a href="#graphs">6. Graphs</a></li>
+                    <li><a href="#ellipses">7. Error Ellipse Analysis</a></li>
+                </ul>
+            </nav>
+
+            <div class="page-break"></div>
+
+            <h2 id="summary">Executive Summary</h2>
+            <table class="summary-table">
+                <tr><td>Total No. of Observations</td><td>{{ num_observations }}</td></tr>
+                <tr><td>Total No. of Parameters</td><td>{{ num_params }}</td></tr>
+                <tr><td>Degrees of Freedom</td><td>{{ dof }}</td></tr>
+                <tr><td>Adjustment Method</td><td>{{ adjust_method }}</td></tr>
+                <tr><td>A Priori Variance</td><td>{{ apriori_var }}</td></tr>
+                <tr><td>A Posteriori Variance</td><td>{{ aposteriori_var }}</td></tr>
+                <tr><td>Outlier Detected</td><td>{{ outlier_detected }} (Test: {{ blunder_test }})</td></tr>
+                <tr><td>Weight Type Used</td><td>{{ weight_type }}</td></tr>
+                <tr><td>Constraint Used</td><td>{{ constraints_used }}</td></tr>
+                <tr><td>Significance Level (1- &alpha;)</td><td>{{ alpha }}</td></tr>
+                <tr><td>Power of Test (1-&beta;)</td><td>{{ beta }}</td></tr>
+            </table>
+
+            <h2 id="obs_eq">1. Observation Equations</h2>
+            <pre>{{ observation_equations }}</pre>
+
+            <h2 id="constraints">2. Constraints</h2>
+            <pre>{{ constraints }}</pre>
+
+            <h2 id="obs_results">3. Observation Results</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>S.No.</th>
+                        <th>Observed</th>
+                        <th>Std Dev (Obs)</th>
+                        <th>Residual</th>
+                        <th>Adjusted</th>
+                        <th>Std Dev (Adj)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for obs in observation_results %}
+                    <tr>
+                        <td>{{ obs.sno }}</td>
+                        <td>{{ obs.observed }}</td>
+                        <td>{{ obs.std_dev_obs }}</td>
+                        <td>{{ obs.residual }}</td>
+                        <td>{{ obs.adjusted }}</td>
+                        <td>{{ obs.std_dev_adj }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="landscape-page">
+                <h3>Covariance Matrix of Adjusted Observations (ΣL̂)</h3>
+                <pre class="wide-pre">{{ covar_L_adj }}</pre>
+            </div>
+
+            <h2 id="residuals">4. Residuals</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>S.No.</th>
+                        <th>Residual</th>
+                        <th>Std Dev</th>
+                        <th>Normalized Residual</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for res in residuals %}
+                    <tr>
+                        <td>{{ res.sno }}</td>
+                        <td>{{ res.residual }}</td>
+                        <td>{{ res.std_dev_residual }}</td>
+                        <td>{{ res.normalized_residual }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="landscape-page">
+                <h3>Covariance Matrix of Residual (ΣV)</h3>
+                <pre class="wide-pre">{{ covar_residual }}</pre>
+            </div>
+
+            <h2 id="params">5. Parameters</h2>
+            {% for station in stations %}
+                <h3>Station: {{ station.name }}</h3>
+                <h4>Cartesian Coordinates</h4>
+                <table>
+                    <thead><tr><th>Parameter</th><th>Initial</th><th>Final</th><th>Std. Dev</th></tr></thead>
+                    <tbody>
+                        <tr><td>X</td><td>{{ station.cartesian.X.initial }}</td><td>{{ station.cartesian.X.final }}</td><td>{{ station.cartesian.X.sd }}</td></tr>
+                        <tr><td>Y</td><td>{{ station.cartesian.Y.initial }}</td><td>{{ station.cartesian.Y.final }}</td><td>{{ station.cartesian.Y.sd }}</td></tr>
+                        <tr><td>Z</td><td>{{ station.cartesian.Z.initial }}</td><td>{{ station.cartesian.Z.final }}</td><td>{{ station.cartesian.Z.sd }}</td></tr>
+                    </tbody>
+                </table>
+                <h4>Geodetic Coordinates</h4>
+                <table>
+                    <thead><tr><th>Parameter</th><th>Initial</th><th>Final</th><th>Std. Dev</th></tr></thead>
+                    <tbody>
+                        <tr><td>X</td><td>{{ station.geodetic.lambda.initial }}</td><td>{{ station.geodetic.lambda.final }}</td><td>{{ station.geodetic.lambda.sd }}</td></tr>
+                        <tr><td>Y</td><td>{{ station.geodetic.phi.initial }}</td><td>{{ station.geodetic.phi.final }}</td><td>{{ station.geodetic.phi.sd }}</td></tr>
+                        <tr><td>Z</td><td>{{ station.geodetic.h.initial }}</td><td>{{ station.geodetic.h.final }}</td><td>{{ station.geodetic.h.sd }}</td></tr>
+                    </tbody>
+                </table>
+            {% endfor %}
+
+            <div class="landscape-page">
+                <h3>Covariance Matrix of Parameters (ΣX̂)</h3>
+                <pre class="wide-pre">{{ covar_param }}</pre>
+            </div>
+
+            <h2 id="graphs">6. Graphs</h2>
+
+            {% if vtpv_graph %}
+            <div class="graph-container">
+                <h3>VTPV Graph</h3>
+                <img src="data:image/png;base64,{{ vtpv_graph }}" alt="VTPV Graph">
+            </div>
+            {% endif %}
+
+            {% if chi_graph %}
+            <div class="graph-container">
+                <h3>Chi-Square Test Graph</h3>
+                <img src="data:image/png;base64,{{ chi_graph }}" alt="Chi-Square Graph">
+            </div>
+            {% endif %}
+
+            {% if network_plot %}
+            <div class="graph-container">
+                <h3>Network Plot</h3>
+                <img src="data:image/png;base64,{{ network_plot }}" alt="Network Plot">
+            </div>
+            {% endif %}
+
+            <div class="page-break"></div>
+            <h2 id="ellipses">7. Error Ellipse Analysis</h2>
+            {% if error_ellipses %}
+                {% for ellipse in error_ellipses %}
+                    <h3>Station: {{ ellipse.name }}</h3>
+                    <h4>Ellipse Statistics</h4>
+                    <table>
+                        {% if ellipse.stats.type == "2D" %}
+                            <tr><td>Semi-major axis (a)</td><td>{{ "%.6f"|format(ellipse.stats.a) }}</td></tr>
+                            <tr><td>Semi-minor axis (b)</td><td>{{ "%.6f"|format(ellipse.stats.b) }}</td></tr>
+                            <tr><td>Orientation (θ)</td><td>{{ "%.4f"|format(ellipse.stats.theta_deg) }}°</td></tr>
+                        {% elif ellipse.stats.type == "3D" %}
+                            <tr><td>Radii (a, b, c)</td><td>{{ ellipse.stats.radii | map('round', 6) | list | join(', ') }}</td></tr>
+                        {% endif %}
+                    </table>
+                    <div class="graph-container">
+                        <img src="data:image/png;base64,{{ ellipse.image }}" alt="Error Ellipse for {{ ellipse.name }}">
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>No error ellipse data was generated.</p>
+            {% endif %}
+
+        </main>
+    </div>
+</body>
+</html>

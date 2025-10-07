@@ -25,7 +25,6 @@ try:
     from backend.adjustment.batch_adjustment import batch_adjustment
     from backend.adjustment.apply_constraint_fn import apply_constraints
     from backend.csv_report.csv_result import export_adjustment_results_excel
-    from backend.csv_report.report import generate_adjustment_report_docx_pdf
 except Exception as e:
     BACKEND_IMPORT_ERROR = e
 if BACKEND_IMPORT_ERROR:

@@ -4,7 +4,7 @@ import streamlit as st
 import io
 import os
 from backend.csv_report.csv_result import export_adjustment_results_excel
-from backend.csv_report.report import generate_adjustment_report_docx_pdf
+from backend.csv_report.report import generate_adjustment_report_html_pdf
 from backend.plots import generate_plots
 
 
@@ -76,34 +76,37 @@ def download_page():
             # but we can store them for consistency.
             st.session_state.network_plot = plots.get("network_plot")
             st.session_state.error_ellipse_plot = plots.get("error_ellipse_plot")
+            st.session_state.error_ellipse_stats = plots.get("error_ellipse_stats")
         except Exception as e:
             st.error(f"Failed to generate plots for report: {e}")
             st.session_state.chi_graph = None
             st.session_state.vtpv_graph = None
             st.session_state.network_plot = None
             st.session_state.error_ellipse_plot = None
+            st.session_state.error_ellipse_stats = None
 
     # Generate and cache the PDF/DOCX report
     if "report_buffer" not in st.session_state:
         try:
-            template_path = os.path.join(os.path.dirname(__file__), "../backend/csv_report/Adju_my_report.docx")
 
-            st.session_state.report_buffer = generate_adjustment_report_docx_pdf(
+            st.session_state.report_buffer = generate_adjustment_report_html_pdf(
                 final_results=st.session_state.final_results,
-                template_path=template_path,
+                template_full_path="D:/GeoNet_SRC_CD/backend/csv_report/report_template.html",
                 hard_constraints=st.session_state.get("hard_constraints"),
                 soft_constraints=st.session_state.get("soft_constraints"),
                 vtpv_graph=st.session_state.get("vtpv_graph"),
                 chi_graph=st.session_state.get("chi_graph"),
-                error_ellipse = st.session_state.get("error_ellipse_plot"),
-                network_plot = st.session_state.get("network_plot"),
-                outlier_result = st.session_state.outlier_results,
-                blunder_detection_method =st.session_state.blunder_detection_method,
-                alpha = st.session_state.alpha,
-                beta_power = st.session_state.beta_power,
-                rejection_level = st.session_state.rejection_level,
-                geodetic_coords = None,
-                initial_results = st.session_state.final_results,
+                weight_type=st.session_state.get("weight_matrix", "Unity"),
+                adjust_method=st.session_state.get("adjustment_type", "Batch Adjustment"),
+                blunder_test=st.session_state.get("blunder_detection_method", "None"),
+                alpha=st.session_state.get("alpha", None),
+                beta=st.session_state.get("beta_power", None),
+                # rejection_level=None,
+                # geodetic_coords=None,
+                initial_results={},
+                network_plot=st.session_state.network_plot,
+                error_ellipse_plots = st.session_state.error_ellipse_plot,
+                error_ellipse_stats = st.session_state.error_ellipse_stats
             )
         except Exception as e:
             st.error(f"Failed to generate report: {e}")
@@ -113,8 +116,8 @@ def download_page():
         st.download_button(
             "⬇️ Download Adjustment Report (DOCX)",
             st.session_state.report_buffer,
-            file_name="adjustment_report.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            file_name="adjustment_report.pdf",
+            mime="application/pdf",
             use_container_width=True
         )
     else:

@@ -1,8 +1,6 @@
 import numpy as np
 import pandas as pd
 from io import BytesIO
-import math
-
 
 def export_adjustment_results_excel(
         final_results,
@@ -30,29 +28,32 @@ def export_adjustment_results_excel(
         initial_results (dict, optional): The results of the *very first* adjustment,
                                           before any outliers were removed. This is crucial
                                           for correctly highlighting all potential outliers.
-                                          If None, highlighting is based on final_results.
 
     Returns:
         tuple: A tuple containing two BytesIO objects: (obs_buffer, param_buffer)
     """
     report_source = initial_results if initial_results is not None else final_results
 
-    # --- Extract data safely from the source dictionary ---
-    Labels = report_source["Labels"]
+    # --- 1. Extract and Prepare Observation Data ---
+    Labels = report_source.get("Labels", [])
     L_obs = np.array(report_source.get("L Observed", []), dtype=float).flatten()
     V = np.array(report_source.get("Residuals", []), dtype=float).flatten()
     L_adj = np.array(report_source.get("L Adjusted", []), dtype=float).flatten()
     sigma_VV = np.array(report_source.get("Sigma_VV", np.zeros((len(V), len(V)))), dtype=float)
     sigma_L_adj = np.array(report_source.get("Sigma L Adjusted", np.zeros((len(L_adj), len(L_adj)))), dtype=float)
+    sigma_L = np.array(report_source.get("Sigma_L", np.zeros((len(L_obs), len(L_obs)))), dtype=float)
 
-    sigma_Lb = np.sqrt(np.abs(np.diag(sigma_VV))) if sigma_VV.size else [np.nan] * len(L_obs)
-    sigma_Vhat = np.sqrt(np.abs(np.diag(sigma_VV))) if sigma_VV.size else [np.nan] * len(V)
-    sigma_Lhat = np.sqrt(np.abs(np.diag(sigma_L_adj))) if sigma_L_adj.size else [np.nan] * len(L_adj)
-    normalized_residuals = (V / sigma_Vhat) if np.all(sigma_Vhat > 0) else [0] * len(V)
+    # Use np.abs() to prevent sqrt of small negative numbers from numerical instability
+    sigma_Lb = np.sqrt(np.abs(np.diag(sigma_L)))
+    sigma_Vhat = np.sqrt(np.abs(np.diag(sigma_VV)))
+    sigma_Lhat = np.sqrt(np.abs(np.diag(sigma_L_adj)))
 
-    # --- Observation DataFrame (with numerical data) ---
+    # Prevent division by zero if a standard deviation is zero
+    with np.errstate(divide='ignore', invalid='ignore'):
+        normalized_residuals = np.nan_to_num(V / sigma_Vhat)
+
     obs_data = {
-        "Sr.": [i + 1 for i in range(len(Labels))],
+        "Sr.": range(1, len(Labels) + 1),
         "Label": Labels,
         "L_Observed": L_obs,
         "Std_Dev_L_Observed": sigma_Lb,
@@ -64,57 +65,71 @@ def export_adjustment_results_excel(
     }
     df_obs = pd.DataFrame(obs_data)
 
-    # --- Parameters DataFrame (based on FINAL results) ---
+    # --- 2. Extract and Prepare Parameter Data ---
     Params_name = [str(p) for p in final_results.get("PARAMS_Name", [])]
     X_hat = np.array(final_results.get("X Hat (Final)", []), dtype=float).flatten()
     Sigma_X = np.array(final_results.get("Sigma_X_hat_Aposteriori", np.zeros((len(X_hat), len(X_hat)))), dtype=float)
-    sigma_X = np.sqrt(np.abs(np.diag(Sigma_X))) if Sigma_X.size else [np.nan] * len(X_hat)
+    sigma_X = np.sqrt(np.abs(np.diag(Sigma_X)))
 
+    # Create DataFrame for unknown parameters
     param_data = {"Parameter": Params_name, "Estimate": X_hat, "SD": sigma_X}
-    if geodetic_coords is not None:
-        param_data["Geodetic Coord"] = [gc[0] for gc in geodetic_coords]
-        param_data["Geodetic SD"] = [gc[1] for gc in geodetic_coords]
     df_params = pd.DataFrame(param_data)
 
+    # Create DataFrame for fixed constants and combine them
     constants = final_results.get("Constant", {})
-    const_rows = pd.DataFrame([{"Parameter": str(k), "Estimate": v, "SD": "fixed"} for k, v in constants.items()])
-    df_all_params = pd.concat([const_rows, df_params], ignore_index=True)
+    if constants:
+        const_rows = pd.DataFrame([
+            {"Parameter": str(k), "Estimate": v, "SD": "fixed"} for k, v in constants.items()
+        ])
+        df_all_params = pd.concat([const_rows, df_params], ignore_index=True)
+    else:
+        df_all_params = df_params
 
-    # --- Prepare for writing to Excel buffers ---
+    # Add geodetic coordinate columns, ensuring they exist even if empty
+
+    df_all_params["Geodetic Coord"] = np.nan
+    df_all_params["Geodetic SD"] = np.nan
+
+    if geodetic_coords:  # Only populate if the list is not empty
+        if len(geodetic_coords) == len(Params_name):
+            try:
+                coord_map = {name: gc[0] for name, gc in zip(Params_name, geodetic_coords)}
+                sd_map = {name: gc[1] for name, gc in zip(Params_name, geodetic_coords)}
+                df_all_params["Geodetic Coord"] = df_all_params["Parameter"].map(coord_map)
+                df_all_params["Geodetic SD"] = df_all_params["Parameter"].map(sd_map)
+            except (IndexError, TypeError):
+                print("Warning: Geodetic coordinates list is malformed. Columns will remain empty.")
+        else:
+            print(f"Warning: Mismatch in length of parameters and geodetic coordinates. Columns will remain empty.")
+
+    # --- 3. Write DataFrames to In-Memory Excel Files ---
     obs_buffer, param_buffer = BytesIO(), BytesIO()
     removed_indices = {res['removed_index'] for res in outlier_results} if outlier_results else set()
 
-    # --- Write Observations to Excel with Formatting ---
+    # --- Write Observations Excel File ---
     with pd.ExcelWriter(obs_buffer, engine="xlsxwriter") as writer:
         df_obs.to_excel(writer, index=False, sheet_name="Observations")
         workbook = writer.book
         worksheet = writer.sheets["Observations"]
-
-        # Define formats
         red_format = workbook.add_format({'bg_color': '#FFC7CE', 'font_color': '#9C0006'})
         yellow_format = workbook.add_format({'bg_color': '#FFEB9C', 'font_color': '#9C6500'})
         bold_format = workbook.add_format({'bold': True})
         header_format = workbook.add_format({'bold': True, 'font_size': 12, 'underline': True})
-
-        # Number formats for controlled precision
         num_format_6dp = workbook.add_format({"num_format": "0.000000"})
         num_format_3dp = workbook.add_format({"num_format": "0.000"})
-        text_format = workbook.add_format({"num_format": "@"})  # For labels
+        text_format = workbook.add_format({"num_format": "@"})
 
-        # Apply column formats
-        worksheet.set_column('A:A', 5, text_format)  # Sr.
-        worksheet.set_column('B:B', 20, text_format)  # Label
-        worksheet.set_column('C:H', 22, num_format_6dp)  # Numerical data
-        worksheet.set_column('I:I', 25, num_format_3dp)  # Test Statistic
+        worksheet.set_column('A:A', 5, text_format)
+        worksheet.set_column('B:B', 20, text_format)
+        worksheet.set_column('C:H', 22, num_format_6dp)
+        worksheet.set_column('I:I', 25, num_format_3dp)
 
-        # Apply conditional formatting for outlier highlighting
         for row_num in range(len(df_obs)):
             if abs(normalized_residuals[row_num]) > rejection_level:
                 worksheet.set_row(row_num + 1, cell_format=yellow_format)
             if row_num in removed_indices:
                 worksheet.set_row(row_num + 1, cell_format=red_format)
 
-        # Add outlier summary
         last_row = len(df_obs) + 3
         worksheet.write(last_row, 0, "Outlier Detection Summary", header_format)
         worksheet.write(last_row + 1, 0, "Detection Method:", bold_format)
@@ -134,16 +149,22 @@ def export_adjustment_results_excel(
                     worksheet.write(last_row + 7 + i, 0, f"  Iteration {i + 1}:", bold_format)
                     worksheet.write(last_row + 7 + i, 1, f"Removed '{label}' (Original Index: {original_idx})")
 
-    # --- Write Parameters to Excel with Formatting ---
+    # --- Write Parameters Excel File ---
     with pd.ExcelWriter(param_buffer, engine="xlsxwriter") as writer:
-        df_all_params.to_excel(writer, index=False, sheet_name="Parameters")
+        df_all_params.fillna('').to_excel(writer, index=False, sheet_name="Parameters")
         workbook = writer.book
         worksheet = writer.sheets["Parameters"]
 
-        worksheet.set_column('A:A', 25, text_format)  # Parameter Name/Constant Name
-        worksheet.set_column('B:E', 25, num_format_6dp)  # Estimate, SD, Geodetic...
+        num_format_6dp = workbook.add_format({"num_format": "0.000000"})
+        text_format = workbook.add_format({"num_format": "@"})
+        header_format = workbook.add_format({'bold': True, 'font_size': 12, 'underline': True})
+        bold_format = workbook.add_format({'bold': True})
 
-        # Add the same outlier summary
+        worksheet.set_column('A:A', 25, text_format)
+        worksheet.set_column('B:B', 25, num_format_6dp)
+        worksheet.set_column('C:C', 25, num_format_6dp)
+        worksheet.set_column('D:E', 25, num_format_6dp)
+
         last_row = len(df_all_params) + 3
         worksheet.write(last_row, 0, "Outlier Detection Summary", header_format)
         worksheet.write(last_row + 1, 0, "Detection Method:", bold_format)
@@ -159,4 +180,3 @@ def export_adjustment_results_excel(
     obs_buffer.seek(0)
     param_buffer.seek(0)
     return obs_buffer, param_buffer
-

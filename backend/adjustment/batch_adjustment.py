@@ -86,6 +86,7 @@ def batch_adjustment(
     # Final calculations using the already computed N_inv
     V_final = V_linear
     sigma_not_hat_squared = (V_final.T @ P @ V_final) / dof
+    print("Sigma not squared:", sigma_not_hat_squared)
 
     # --- Use safe_inverse for P matrix as well (though it's typically invertible) ---
     P_inv = safe_inverse(P)
@@ -93,7 +94,36 @@ def batch_adjustment(
     sigma_lhat_lhat = sigma_not_hat_squared * (A_evaluated @ N_inv @ A_evaluated.T)
     sigma_x_hat_apriori = sigma_not_square * N_inv
     sigma_x_hat_aposteriori = sigma_not_hat_squared * N_inv
-    print(sigma_VV)
+
+    # 1. Define a threshold for ill-conditioning. 1e7 is a reasonable value.
+    CONDITION_THRESHOLD = 1e7
+
+    # 2. Check the condition number of the normal matrix N and print a warning if it's high.
+    Warning = ''
+    if np.linalg.cond(N) > CONDITION_THRESHOLD:
+        Warning +=("\n⚠️ WARNING: The normal matrix (N) is ill-conditioned.\n"
+                   " This indicates a weak network geometry (e.g., collinear points or poor redundancy).\n"
+                   " The results may be numerically unstable.\n"
+                   " INFO: Negative variances found on the diagonal of sigma_VV due to instability. Clamping these values to zero to allow calculations to proceed.")
+        print("\n⚠️ WARNING: The normal matrix (N) is ill-conditioned.")
+        print("   This indicates a weak network geometry (e.g., collinear points or poor redundancy).")
+        print("   The results may be numerically unstable.\n")
+
+    # 3. Correct the diagonal of the sigma_VV matrix.
+    # Get a copy of the diagonal to check for negative values.
+    diag_sigma_VV = np.diagonal(sigma_VV).copy()
+
+    # Check if any diagonal elements are negative.
+    if np.any(diag_sigma_VV < 0):
+        print("INFO: Negative variances found on the diagonal of sigma_VV due to instability.")
+        print("      Clamping these values to zero to allow calculations to proceed.")
+
+
+        # Use np.maximum to replace any element less than 0 with 0.
+        corrected_diag = np.maximum(10**(-6), diag_sigma_VV)
+        # Place the corrected diagonal back into the sigma_VV matrix.
+        np.fill_diagonal(sigma_VV, corrected_diag)
+    # --- End: Your program can now safely use the corrected sigma_VV ---
 
     first_check = np.abs(np.abs(V_final.T @ P @ V_final) - np.abs(-V_final.T @ P @ L)) < 10 ** (-6)
     second_check = np.all(np.abs(A_evaluated.T @ P @ V_final) < 10 ** (-6))
@@ -102,11 +132,11 @@ def batch_adjustment(
         "Equations": observations_eq, "N": len(observations_eq), "P Matrix": P,
         "Design Matrix (Final)": A_evaluated, "Normal Matrix": N, "Residuals": V_final,
         "L Adjusted": L_adjusted, "L Observed": L_observed, "Apriori Variance": sigma_not_square,
-        "Aposteriori Variance": sigma_not_hat_squared.item(), "X Hat (Final)": X_hat, "Delta_X": delta_X,
+        "Aposteriori Variance": sigma_not_hat_squared, "X Hat (Final)": X_hat, "Delta_X": delta_X,
         "Sigma_VV": sigma_VV, "Sigma L Adjusted": sigma_lhat_lhat, "Sigma_X_hat_Apriori": sigma_x_hat_apriori,
         "Sigma_X_hat_Aposteriori": sigma_x_hat_aposteriori, "Iterations": iteration + 1,
         "First Check Passed V.T@P@V = -V.T@P@L": first_check,
         "Second Check Passed A.T@P@V = 0": second_check, "DOF": dof, "PARAMS_Name": params_symbols,
         "Constant": constants, "Labels": labels, "VTPV_values": vtpv_values,
     }
-    return final_results, vtpv_values
+    return final_results, vtpv_values,Warning
