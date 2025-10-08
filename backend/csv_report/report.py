@@ -7,10 +7,72 @@ from jinja2 import Environment, FileSystemLoader
 from weasyprint import HTML
 import matplotlib.figure
 import os
+import plotly.graph_objects as go
+
+def format_matrix_for_report(matrix, max_rows=30, max_cols=11):
+    """
+    Formats a large matrix for display in a report by truncating it and
+    applying scientific notation with 3-digit precision.
+
+    If the matrix is larger than the specified max dimensions, it will be
+    truncated with ellipses (...) in the middle of rows and columns. All
+    numerical values are formatted to the '{:.3e}' format.
+
+    Args:
+        matrix (list | np.ndarray | pd.DataFrame): The matrix to format.
+        max_rows (int): The maximum number of rows to display.
+        max_cols (int): The maximum number of columns to display.
+
+    Returns:
+        str: A formatted string representation of the potentially truncated matrix.
+    """
+    df = pd.DataFrame(matrix)
+    n_rows, n_cols = df.shape
+
+    # Define the formatting function
+    formatter = lambda x: f'{x:.3e}' if isinstance(x, (int, float, np.number)) else x
+
+    # If the matrix is small enough, format it and return directly
+    if n_rows <= max_rows and n_cols <= max_cols:
+        return df.applymap(formatter).to_string()
+
+    # --- Truncate Rows if necessary ---
+    if n_rows > max_rows:
+        top_rows = max_rows // 2
+        bottom_rows = max_rows - top_rows
+        # Create a "..." row to insert between the top and bottom sections
+        dots_row = pd.DataFrame([['...'] * n_cols], columns=df.columns, index=['...'])
+        df = pd.concat([df.head(top_rows), dots_row, df.tail(bottom_rows)])
+
+    # --- Truncate Columns if necessary ---
+    if n_cols > max_cols:
+        left_cols = max_cols // 2
+        right_cols = max_cols - left_cols
+
+        # Select left and right columns
+        df_left = df.iloc[:, :left_cols]
+        df_right = df.iloc[:, -right_cols:]
+
+        # Create a "..." column to insert
+        dots_col = pd.DataFrame({'...': ['...'] * len(df)}, index=df.index)
+
+        # Concatenate them all together
+        df_final = pd.concat([df_left, dots_col, df_right], axis=1)
+    else:
+        df_final = df
+
+    # Apply the number formatting to the final, potentially truncated DataFrame
+    return df_final.applymap(formatter).to_string()
+
 
 def image_to_base64(img_obj, fmt="png"):
-    """Converts a Matplotlib figure or image bytes to a base64 encoded string."""
-    if isinstance(img_obj, matplotlib.figure.Figure):
+    """
+    Converts a Matplotlib or Plotly figure, or image bytes,
+    to a base64 encoded string.
+    """
+    if isinstance(img_obj, go.Figure): # <-- NEW: Handle Plotly figures
+        img_bytes = img_obj.to_image(format=fmt, scale=2)
+    elif isinstance(img_obj, matplotlib.figure.Figure):
         buf = io.BytesIO()
         img_obj.savefig(buf, format=fmt, bbox_inches="tight")
         buf.seek(0)
@@ -21,9 +83,11 @@ def image_to_base64(img_obj, fmt="png"):
         return None
     return base64.b64encode(img_bytes).decode('utf-8')
 
+
 def generate_adjustment_report_html_pdf(
         final_results,
         template_full_path,
+        adjustment_dimension,
         hard_constraints=None, soft_constraints=None, vtpv_graph=None,
         chi_graph=None, weight_type=None, adjust_method="Batch Adjustment",
         blunder_test=None, alpha=None, beta=None, initial_results=None,
@@ -43,6 +107,9 @@ def generate_adjustment_report_html_pdf(
             as 'X Hat (Final)', 'Residuals', 'Sigma_X_hat_Aposteriori', etc.
         template_full_path (str):
             The absolute file path to the Jinja2 HTML template used for the report.
+        adjustment_dimension (str):
+            The dimension of the adjustment ('1D', '2D', or '3D'). This controls
+            how parameters and ellipses are displayed in the report.
         hard_constraints (any, optional):
             Data representing hard constraints. Defaults to None.
         soft_constraints (any, optional):
@@ -93,8 +160,9 @@ def generate_adjustment_report_html_pdf(
         # --- 2. Prepare and Format Data for the Template ---
         num_obs = len(final_results.get("L Observed", []))
         num_params = len(final_results.get("X Hat (Final)", []))
-        outlier_detected = "Yes" if blunder_test and blunder_test != "None" else "No"
-        
+        # More robust outlier detection check
+        outlier_detected = "Yes" if blunder_test and str(blunder_test).lower() != "none" else "No"
+
         # Flatten arrays for consistent processing and display
         L_obs = np.array(final_results.get("L Observed", []), dtype=float).flatten()
         V = np.array(final_results.get("Residuals", []), dtype=float).flatten()
@@ -119,7 +187,8 @@ def generate_adjustment_report_html_pdf(
         for i in range(num_obs):
             residuals.append({
                 "sno": i + 1, "residual": f"{V[i]:.6f}",
-                "std_dev_residual": f"{sigma_Vhat[i]:.6f}", "normalized_residual": f"{abs(normalized_residuals[i]):.4f}",
+                "std_dev_residual": f"{sigma_Vhat[i]:.6f}",
+                "normalized_residual": f"{abs(normalized_residuals[i]):.4f}",
             })
 
         # Format observation equations to include their observed value
@@ -129,16 +198,23 @@ def generate_adjustment_report_html_pdf(
             for i, eq in enumerate(equations)
         ]
         observation_equations_str = "\n".join(obs_eq_formatted)
-        
-        
-        # --- FULL STATION LOGIC ---
+
+        # --- STATION PARAMETER LOGIC (Dimension Agnostic) ---
+        # This logic works for 1D, 2D, or 3D because it only populates the data
+        # that is present in the `param_names` list. The template then decides what to display.
         param_names = [str(p) for p in final_results.get("PARAMS_Name", [])]
         X_hat_final = np.array(final_results.get("X Hat (Final)", [])).flatten()
         Sigma_X_hat = np.array(final_results.get("Sigma_X_hat_Aposteriori", np.zeros((num_params, num_params))))
         sigma_Xhat = np.sqrt(np.abs(np.diag(Sigma_X_hat)))
         station_map = {}
         for i, param_name in enumerate(param_names):
-            coord, station_name = param_name.split("_", 1) if "_" in param_name else (param_name, "Unknown")
+            # For 1D, param_name might be "Z_STN1" or just "STN1"
+            parts = param_name.split("_", 1)
+            if len(parts) == 2:
+                coord, station_name = parts
+            else:  # Assumes 1D parameter name is the station name itself
+                coord, station_name = "Z", param_name
+
             if station_name not in station_map:
                 station_map[station_name] = {
                     "name": station_name,
@@ -159,11 +235,11 @@ def generate_adjustment_report_html_pdf(
                 "sd": f"{sigma_Xhat[i]:.6f}"
             }
 
-            coord_lower = coord.lower()
-            if coord_lower in ["x", "y", "z"]:
-                station_map[station_name]["cartesian"][coord.upper()] = param_data
-            elif coord_lower in ["lambda", "phi", "h", "height"]:
-                key = "h" if coord_lower == "height" else coord_lower
+            coord_upper = coord.upper()
+            if coord_upper in ["X", "Y", "Z"]:
+                station_map[station_name]["cartesian"][coord_upper] = param_data
+            elif coord.lower() in ["lambda", "phi", "h", "height"]:
+                key = "h" if coord.lower() == "height" else coord.lower()
                 station_map[station_name]["geodetic"][key] = param_data
         stations = list(station_map.values())
 
@@ -171,15 +247,12 @@ def generate_adjustment_report_html_pdf(
         error_ellipses_data = []
         if error_ellipse_plots and error_ellipse_stats:
             for station_name, stats in error_ellipse_stats.items():
-                # Find the correct Plotly figure by matching the station name in its title
                 plot_for_station = next(
                     (p for p in error_ellipse_plots if station_name in p.layout.title.text),
                     None
                 )
                 if plot_for_station:
-                    # Convert the Plotly figure to a PNG image in memory
-                    img_bytes = plot_for_station.to_image(format="png", scale=2) # Higher scale for better PDF quality
-                    # Encode the image bytes into a base64 string for embedding in HTML
+                    img_bytes = plot_for_station.to_image(format="png", scale=2)
                     b64_img = image_to_base64(img_bytes)
                     error_ellipses_data.append({
                         "name": station_name,
@@ -188,48 +261,34 @@ def generate_adjustment_report_html_pdf(
                     })
 
         # --- Prepare Formatted Strings for Constraints ---
-        constraints_parts = []
-        used_constraint_types = []
-
-        # Process and format hard constraints if they exist
+        constraints_parts, used_constraint_types = [], []
         if hard_constraints:
             used_constraint_types.append("Hard")
-            hc_lines = ["Hard Constraints:"]
-            for station, value in hard_constraints.items():
-                hc_lines.append(f"  • Station {station}: Fixed at {value}")
-            constraints_parts.append("\n".join(hc_lines))
-
-        # Process and format soft constraints if they exist
+            constraints_parts.append("\n".join(
+                ["Hard Constraints:"] + [f"  • Station {st}: Fixed at {val}" for st, val in hard_constraints.items()]
+            ))
         if soft_constraints:
             used_constraint_types.append("Soft")
             sc_lines = ["Soft Constraints:"]
             for station, data in soft_constraints.items():
                 sc_lines.append(f"  • Station {station}: Constrained at {data['value']}")
-                # Convert the VCV list to a formatted numpy array string
-                cov_matrix_str = np.array2string(np.array(data['cov']), prefix='    ')
-                sc_lines.append(f"    VCV Matrix:\n{cov_matrix_str}")
+                sc_lines.append(f"    VCV Matrix:\n{np.array2string(np.array(data['cov']), prefix='    ')}")
             constraints_parts.append("\n".join(sc_lines))
-
-        # Create the final string for the detailed constraints section
         constraints_display_str = "\n\n".join(constraints_parts) if constraints_parts else "None"
-
-        # Create the final summary string for the executive summary table
         constraints_used_str = ", ".join(used_constraint_types) if used_constraint_types else "None"
 
-        # --- Safely extract the A Posteriori Variance as a scalar ---
-        # Get the raw value, which might be a scalar or a single-element array
+        # Safely extract the A Posteriori Variance as a scalar
         aposteriori_var_raw = final_results.get('Aposteriori Variance', 0)
-
-        # Convert to a NumPy array, flatten it, and get the first (and only) element
         aposteriori_var_scalar = np.array(aposteriori_var_raw).flatten()[0]
+
         # --- 3. Build the Master Context Dictionary ---
-        # This dictionary holds all the data that will be passed to the HTML template.
         context = {
             # Report Metadata
             "curr_date": datetime.today().strftime("%Y-%m-%d"),
             "curr_time": datetime.today().strftime("%H:%M:%S"),
 
             # Executive Summary Data
+            "adjustment_dimension": adjustment_dimension,  # **NEWLY ADDED**
             "num_observations": num_obs,
             "num_params": num_params,
             "dof": final_results.get("DOF", "N/A"),
@@ -238,7 +297,7 @@ def generate_adjustment_report_html_pdf(
             "outlier_detected": outlier_detected,
             "blunder_test": blunder_test if outlier_detected == "Yes" else "N/A",
             "weight_type": weight_type,
-            "constraints_used":  constraints_used_str,
+            "constraints_used": constraints_used_str,
             "adjust_method": adjust_method,
             "alpha": alpha,
             "beta": beta,
@@ -248,14 +307,14 @@ def generate_adjustment_report_html_pdf(
             "constraints": constraints_display_str,
 
             # Data for Tables
-            "observation_results": observation_results, 
+            "observation_results": observation_results,
             "residuals": residuals,
-            "stations": stations, 
+            "stations": stations,
 
             # Covariance Matrices (converted to string for pre-formatted display)
-            "covar_L_adj": pd.DataFrame(final_results.get("Sigma L Adjusted", [])).to_string(),
-            "covar_param": pd.DataFrame(final_results.get("Sigma_X_hat_Aposteriori", [])).to_string(),
-            "covar_residual": pd.DataFrame(final_results.get("Sigma_VV", [])).to_string(),
+            "covar_L_adj": format_matrix_for_report(final_results.get("Sigma L Adjusted", [])),
+            "covar_param": format_matrix_for_report(final_results.get("Sigma_X_hat_Aposteriori", [])),
+            "covar_residual": format_matrix_for_report(final_results.get("Sigma_VV", [])),
 
             # Base64 Encoded Graphs
             "vtpv_graph": image_to_base64(vtpv_graph),
@@ -265,16 +324,14 @@ def generate_adjustment_report_html_pdf(
         }
 
         # --- 4. Render HTML and Generate PDF Buffer ---
-        # Render the Jinja2 template with all the prepared data.
         html_out = template.render(context)
-
-        # Use WeasyPrint to convert the rendered HTML string into a PDF in memory.
         pdf_buffer = HTML(string=html_out).write_pdf()
 
         print("✅ Successfully generated PDF in memory buffer.")
         return pdf_buffer
 
     except Exception as e:
-        # If any error occurs during the process, print it and return None.
         print(f"❌ Error generating report: {e}")
+        import traceback
+        traceback.print_exc()
         return None

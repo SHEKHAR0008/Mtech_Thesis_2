@@ -13,9 +13,10 @@
             }
         }
 
-        /* Defines a new page style for landscape orientation */
+        /* MODIFICATION: Reduced margins for landscape pages to create more space */
         @page landscape {
             size: A4 landscape;
+            margin: 0.5in;
         }
 
         body {
@@ -62,10 +63,11 @@
             border: 1px solid #ccc;
             padding: 10px;
             font-family: Consolas, "Courier New", monospace;
+            white-space: pre-wrap; /* Wrap long lines */
         }
 
         .wide-pre {
-            white-space: pre; /* Prevents text from wrapping */
+            white-space: pre; /* Prevent wrapping for matrices */
             font-size: 8pt;   /* Smaller font to fit more data */
         }
 
@@ -101,6 +103,14 @@
         .toc-list li a::after {
             content: leader('.') target-counter(attr(href), page);
         }
+
+        /* NEW STYLE: For the matrix footer note */
+        .matrix-footer {
+            font-size: 9pt;
+            font-style: italic;
+            text-align: center;
+            margin-top: -10px;
+        }
     </style>
 </head>
 <body>
@@ -122,7 +132,9 @@
                     <li><a href="#residuals">4. Residuals</a></li>
                     <li><a href="#params">5. Parameters</a></li>
                     <li><a href="#graphs">6. Graphs</a></li>
-                    <li><a href="#ellipses">7. Error Ellipse Analysis</a></li>
+                    {% if adjustment_dimension in ['2D', '3D'] %}
+                        <li><a href="#ellipses">7. Error Ellipse/Ellipsoid Analysis</a></li>
+                    {% endif %}
                 </ul>
             </nav>
 
@@ -130,6 +142,7 @@
 
             <h2 id="summary">Executive Summary</h2>
             <table class="summary-table">
+                <tr><td>Adjustment Dimension</td><td><strong>{{ adjustment_dimension }}</strong></td></tr>
                 <tr><td>Total No. of Observations</td><td>{{ num_observations }}</td></tr>
                 <tr><td>Total No. of Parameters</td><td>{{ num_params }}</td></tr>
                 <tr><td>Degrees of Freedom</td><td>{{ dof }}</td></tr>
@@ -176,8 +189,11 @@
             </table>
 
             <div class="landscape-page">
-                <h3>Covariance Matrix of Adjusted Observations (ΣL̂)</h3>
+                <h3>Covariance Matrix of Adjusted Observations (ΣL̂) [{{ num_observations }} x {{ num_observations }}]</h3>
                 <pre class="wide-pre">{{ covar_L_adj }}</pre>
+                <p class="matrix-footer">
+                    <b>Note:</b> The displayed matrix may be truncated. For the full matrix, please refer to the CSV file provided with this report.
+                </p>
             </div>
 
             <h2 id="residuals">4. Residuals</h2>
@@ -203,36 +219,64 @@
             </table>
 
             <div class="landscape-page">
-                <h3>Covariance Matrix of Residual (ΣV)</h3>
+                <h3>Covariance Matrix of Residuals (ΣV) [{{ num_observations }} x {{ num_observations }}]</h3>
                 <pre class="wide-pre">{{ covar_residual }}</pre>
+                <p class="matrix-footer">
+                    <b>Note:</b> The displayed matrix may be truncated. For the full matrix, please refer to the CSV file provided with this report.
+                </p>
             </div>
 
             <h2 id="params">5. Parameters</h2>
             {% for station in stations %}
                 <h3>Station: {{ station.name }}</h3>
-                <h4>Cartesian Coordinates</h4>
-                <table>
-                    <thead><tr><th>Parameter</th><th>Initial</th><th>Final</th><th>Std. Dev</th></tr></thead>
-                    <tbody>
-                        <tr><td>X</td><td>{{ station.cartesian.X.initial }}</td><td>{{ station.cartesian.X.final }}</td><td>{{ station.cartesian.X.sd }}</td></tr>
-                        <tr><td>Y</td><td>{{ station.cartesian.Y.initial }}</td><td>{{ station.cartesian.Y.final }}</td><td>{{ station.cartesian.Y.sd }}</td></tr>
-                        <tr><td>Z</td><td>{{ station.cartesian.Z.initial }}</td><td>{{ station.cartesian.Z.final }}</td><td>{{ station.cartesian.Z.sd }}</td></tr>
-                    </tbody>
-                </table>
-                <h4>Geodetic Coordinates</h4>
-                <table>
-                    <thead><tr><th>Parameter</th><th>Initial</th><th>Final</th><th>Std. Dev</th></tr></thead>
-                    <tbody>
-                        <tr><td>X</td><td>{{ station.geodetic.lambda.initial }}</td><td>{{ station.geodetic.lambda.final }}</td><td>{{ station.geodetic.lambda.sd }}</td></tr>
-                        <tr><td>Y</td><td>{{ station.geodetic.phi.initial }}</td><td>{{ station.geodetic.phi.final }}</td><td>{{ station.geodetic.phi.sd }}</td></tr>
-                        <tr><td>Z</td><td>{{ station.geodetic.h.initial }}</td><td>{{ station.geodetic.h.final }}</td><td>{{ station.geodetic.h.sd }}</td></tr>
-                    </tbody>
-                </table>
+
+                {% if adjustment_dimension == '1D' %}
+                    <h4>Adjusted Parameter</h4>
+                    <table>
+                        <thead><tr><th>Parameter</th><th>Initial</th><th>Final</th><th>Std. Dev</th></tr></thead>
+                        <tbody>
+                            <tr>
+                                <td>Z (Height)</td>
+                                <td>{{ station.cartesian.Z.initial }}</td>
+                                <td>{{ station.cartesian.Z.final }}</td>
+                                <td>{{ station.cartesian.Z.sd }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                {% else %}
+                    <h4>Cartesian Coordinates</h4>
+                    <table>
+                        <thead><tr><th>Parameter</th><th>Initial</th><th>Final</th><th>Std. Dev</th></tr></thead>
+                        <tbody>
+                            <tr><td>X</td><td>{{ station.cartesian.X.initial }}</td><td>{{ station.cartesian.X.final }}</td><td>{{ station.cartesian.X.sd }}</td></tr>
+                            <tr><td>Y</td><td>{{ station.cartesian.Y.initial }}</td><td>{{ station.cartesian.Y.final }}</td><td>{{ station.cartesian.Y.sd }}</td></tr>
+                            {% if adjustment_dimension == '3D' %}
+                            <tr><td>Z</td><td>{{ station.cartesian.Z.initial }}</td><td>{{ station.cartesian.Z.final }}</td><td>{{ station.cartesian.Z.sd }}</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+
+                    <h4>Geodetic Coordinates</h4>
+                    <table>
+                        <thead><tr><th>Parameter</th><th>Initial</th><th>Final</th><th>Std. Dev</th></tr></thead>
+                        <tbody>
+                            <tr><td>Longitude (&lambda;)</td><td>{{ station.geodetic.lambda.initial }}</td><td>{{ station.geodetic.lambda.final }}</td><td>{{ station.geodetic.lambda.sd }}</td></tr>
+                            <tr><td>Latitude (&phi;)</td><td>{{ station.geodetic.phi.initial }}</td><td>{{ station.geodetic.phi.final }}</td><td>{{ station.geodetic.phi.sd }}</td></tr>
+                            {% if adjustment_dimension == '3D' %}
+                            <tr><td>Height (h)</td><td>{{ station.geodetic.h.initial }}</td><td>{{ station.geodetic.h.final }}</td><td>{{ station.geodetic.h.sd }}</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                {% endif %}
             {% endfor %}
 
             <div class="landscape-page">
-                <h3>Covariance Matrix of Parameters (ΣX̂)</h3>
+                <h3>Covariance Matrix of Parameters (ΣX̂) [{{ num_params }} x {{ num_params }}]</h3>
                 <pre class="wide-pre">{{ covar_param }}</pre>
+                <p class="matrix-footer">
+                    <b>Note:</b> The displayed matrix may be truncated. For the full matrix, please refer to the CSV file provided with this report.
+                </p>
             </div>
 
             <h2 id="graphs">6. Graphs</h2>
@@ -258,27 +302,29 @@
             </div>
             {% endif %}
 
-            <div class="page-break"></div>
-            <h2 id="ellipses">7. Error Ellipse Analysis</h2>
-            {% if error_ellipses %}
-                {% for ellipse in error_ellipses %}
-                    <h3>Station: {{ ellipse.name }}</h3>
-                    <h4>Ellipse Statistics</h4>
-                    <table>
-                        {% if ellipse.stats.type == "2D" %}
-                            <tr><td>Semi-major axis (a)</td><td>{{ "%.6f"|format(ellipse.stats.a) }}</td></tr>
-                            <tr><td>Semi-minor axis (b)</td><td>{{ "%.6f"|format(ellipse.stats.b) }}</td></tr>
-                            <tr><td>Orientation (θ)</td><td>{{ "%.4f"|format(ellipse.stats.theta_deg) }}°</td></tr>
-                        {% elif ellipse.stats.type == "3D" %}
-                            <tr><td>Radii (a, b, c)</td><td>{{ ellipse.stats.radii | map('round', 6) | list | join(', ') }}</td></tr>
-                        {% endif %}
-                    </table>
-                    <div class="graph-container">
-                        <img src="data:image/png;base64,{{ ellipse.image }}" alt="Error Ellipse for {{ ellipse.name }}">
-                    </div>
-                {% endfor %}
-            {% else %}
-                <p>No error ellipse data was generated.</p>
+            {% if adjustment_dimension in ['2D', '3D'] %}
+                <div class="page-break"></div>
+                <h2 id="ellipses">7. Error Ellipse/Ellipsoid Analysis</h2>
+                {% if error_ellipses %}
+                    {% for ellipse in error_ellipses %}
+                        <h3>Station: {{ ellipse.name }}</h3>
+                        <h4>{{ ellipse.stats.type }} Ellipse/Ellipsoid Statistics</h4>
+                        <table>
+                            {% if ellipse.stats.type == "2D" %}
+                                <tr><td>Semi-major axis (a)</td><td>{{ "%.6f"|format(ellipse.stats.a) }}</td></tr>
+                                <tr><td>Semi-minor axis (b)</td><td>{{ "%.6f"|format(ellipse.stats.b) }}</td></tr>
+                                <tr><td>Orientation (&theta;)</td><td>{{ "%.4f"|format(ellipse.stats.theta_deg) }}°</td></tr>
+                            {% elif ellipse.stats.type == "3D" %}
+                                <tr><td>Radii (a, b, c)</td><td>{{ ellipse.stats.radii | map('round', 6) | list | join(', ') }}</td></tr>
+                            {% endif %}
+                        </table>
+                        <div class="graph-container">
+                            <img src="data:image/png;base64,{{ ellipse.image }}" alt="Error Ellipse/Ellipsoid for {{ ellipse.name }}">
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p>No error ellipse/ellipsoid data was generated.</p>
+                {% endif %}
             {% endif %}
 
         </main>

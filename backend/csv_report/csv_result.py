@@ -177,6 +177,32 @@ def export_adjustment_results_excel(
             worksheet.write(last_row + 4, 0, "Total Outliers Detected:", bold_format)
             worksheet.write(last_row + 4, 1, len(removed_indices))
 
+        # --- 4. NEW: Create Combined Variance-Covariance Excel Buffer ---
+        covar_buffer = BytesIO()
+
+        # Create DataFrames for each matrix with appropriate labels for clarity
+        df_cov_L_adj = pd.DataFrame(final_results.get("Sigma L Adjusted", []), index=Labels, columns=Labels)
+        df_cov_V = pd.DataFrame(final_results.get("Sigma_VV", []), index=Labels, columns=Labels)
+        df_cov_X = pd.DataFrame(final_results.get("Sigma_X_hat_Aposteriori", []), index=Params_name,
+                                columns=Params_name)
+
+        # Use ExcelWriter to save each DataFrame to a different sheet in the same file
+        with pd.ExcelWriter(covar_buffer, engine="xlsxwriter") as writer:
+            df_cov_L_adj.to_excel(writer, index=True, sheet_name="Covar_Adjusted_Obs")
+            df_cov_V.to_excel(writer, index=True, sheet_name="Covar_Residuals")
+            df_cov_X.to_excel(writer, index=True, sheet_name="Covar_Parameters")
+
+            # Optional: Add some basic formatting to auto-fit column widths for readability
+            for sheet_name in writer.sheets:
+                worksheet = writer.sheets[sheet_name]
+                for idx, col in enumerate(df_cov_L_adj):  # Get column names
+                    series = df_cov_L_adj[col]
+                    max_len = max((
+                        series.astype(str).map(len).max(),  # len of largest item
+                        len(str(series.name))  # len of column name/header
+                    )) + 1  # adding a little extra space
+                    worksheet.set_column(idx, idx, max_len)  # set column width
+
     obs_buffer.seek(0)
     param_buffer.seek(0)
-    return obs_buffer, param_buffer
+    return obs_buffer, param_buffer, covar_buffer

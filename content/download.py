@@ -20,7 +20,7 @@ def download_page():
 
     # Generate and cache CSVs on first entry to this page
     if "obs_buffer" not in st.session_state:
-        st.session_state.obs_buffer, st.session_state.params_buffer = export_adjustment_results_excel(
+        st.session_state.obs_buffer, st.session_state.params_buffer, st.session_state.covar_buffer = export_adjustment_results_excel(
             st.session_state.final_results,
             st.session_state.outlier_results,
             st.session_state.blunder_detection_method,
@@ -92,6 +92,7 @@ def download_page():
             st.session_state.report_buffer = generate_adjustment_report_html_pdf(
                 final_results=st.session_state.final_results,
                 template_full_path="D:/GeoNet_SRC_CD/backend/csv_report/report_template.html",
+                adjustment_dimension= st.session_state.dimension,
                 hard_constraints=st.session_state.get("hard_constraints"),
                 soft_constraints=st.session_state.get("soft_constraints"),
                 vtpv_graph=st.session_state.get("vtpv_graph"),
@@ -112,16 +113,30 @@ def download_page():
             st.error(f"Failed to generate report: {e}")
             st.session_state.report_buffer = None
 
-    if st.session_state.report_buffer:
-        st.download_button(
-            "⬇️ Download Adjustment Report (DOCX)",
-            st.session_state.report_buffer,
-            file_name="adjustment_report.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
-    else:
-        st.button("⬇️ Download Adjustment Report (DOCX)", disabled=True, use_container_width=True)
+    csv_cols = st.columns(2, gap="large")
+    with csv_cols[0]:
+        if st.session_state.report_buffer:
+            st.download_button(
+                "Download PDF Report",
+                st.session_state.report_buffer,
+                file_name="Adjustemnt Report.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+        else:
+            st.button("📊 Download PDF Report", disabled=True, use_container_width=True)
+
+    with csv_cols[1]:
+        if st.session_state.covar_buffer:
+            st.download_button(
+                "📊 Download Var-Covar CSV",
+                st.session_state.covar_buffer,
+                file_name="covar.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+        else:
+            st.button("📊 Download VAR-COVAR Excel", disabled=True, use_container_width=True)
 
     st.markdown("---")
     prev_col, next_col = st.columns(2)

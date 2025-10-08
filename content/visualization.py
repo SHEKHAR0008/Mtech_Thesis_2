@@ -5,6 +5,12 @@ import io
 import json
 from backend.plots import generate_plots
 
+@st.dialog("Plot Viewer")
+def view_plot(title, plot_object):
+    """Displays a Plotly chart in a Streamlit dialog."""
+    st.header(title)
+    st.plotly_chart(plot_object, use_container_width=True)
+
 def visualization_page():
     """
     Renders the Visualization page, displaying all generated plots.
@@ -36,43 +42,74 @@ def visualization_page():
             st.session_state.network_plot = None
             st.session_state.error_ellipse_plot = None
 
-    st.subheader("Available Graphs")
+    st.subheader("Analysis Graphs")
 
-    # Define the static plots to be displayed
-    plots_info_static = [
-        ("VTPV Graph", "vtpv_graph"),
-        ("Chi-Square Graph", "chi_graph"),
+    # Define the interactive plots to be displayed
+    plots_info = [
+        ("VTPV Convergence", "vtpv_graph"),
+        ("Chi-Square Test", "chi_graph"),
         ("Network Plot", "network_plot"),
     ]
 
-    for title, key in plots_info_static:
+    # for title, key in plots_info:
+    #     st.markdown("---")
+    #     # Get the Plotly figure object from session state
+    #     plot_object = st.session_state.get(key)
+    #
+    #     # Create two columns for the "Show" and "Download" buttons
+    #     col1, col2 = st.columns([0.7, 0.3])
+    #
+    #     with col1:
+    #         if plot_object:
+    #             # Use st.popover to create a button that reveals the plot
+    #             with st.popover(f"📊 Show {title}", use_container_width=True):
+    #                 # Display the interactive Plotly chart inside the popover
+    #                 st.plotly_chart(plot_object, use_container_width=True)
+    #         else:
+    #             st.info(f"{title} not available.")
+    #
+    #     with col2:
+    #         if plot_object:
+    #             # Create a download button for the plot as a static PNG image
+    #             st.download_button(
+    #                 label="⬇️ Download as PNG",
+    #                 # Convert the Plotly figure to PNG bytes on the fly
+    #                 data=plot_object.to_image(format="png", scale=3),  # scale=3 for high resolution
+    #                 file_name=f"{key}.png",
+    #                 mime="image/png",
+    #                 key=f"download_{key}",
+    #                 use_container_width=True
+    #             )
+    #         else:
+    #             # Keep the layout consistent by using an empty placeholder
+    #             st.empty()
+    for title, key in plots_info:
         st.markdown("---")
+        # Get the plot object from the unified 'plots' dictionary
+        plot_object = st.session_state.get(key)
 
         col1, col2 = st.columns([0.7, 0.3])
-        plot_buffer = st.session_state.get(key)
 
         with col1:
-            if plot_buffer:
-                with st.popover(f"📊 Show {title}", width='stretch'):
-                    plot_buffer.seek(0)
-                    st.image(plot_buffer, width='stretch')
+            if plot_object:
+                # --- STEP 2: Call the dialog function when the button is clicked ---
+                if st.button(f"🔎 View {title}", use_container_width=True, key=f"view_{key}"):
+                    view_plot(title, plot_object)  # This now opens the dialog
             else:
                 st.info(f"{title} not available.")
 
         with col2:
-            if plot_buffer:
-                plot_buffer.seek(0)
+            if plot_object:
                 st.download_button(
-                    label=f"⬇️ Download",
-                    data=plot_buffer,
+                    label="⬇️ Download as PNG",
+                    data=plot_object.to_image(format="png", scale=3),
                     file_name=f"{key}.png",
                     mime="image/png",
                     key=f"download_{key}",
-                    width='stretch'
+                    use_container_width=True
                 )
             else:
                 st.empty()
-
     # --- Interactive Error Ellipse Plotting ---
     st.markdown("---")
     st.subheader("Interactive Error Ellipses")

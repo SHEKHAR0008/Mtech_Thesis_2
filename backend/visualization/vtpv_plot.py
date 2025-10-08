@@ -1,27 +1,30 @@
-import numpy as np
-import matplotlib.pyplot as plt
-import io
+# backend/visualization/vtpv_plot.py
+
+import plotly.graph_objects as go
 
 def generate_vtpv_plot(final_results):
     """
-    Generates a static Matplotlib plot for V^T P V convergence.
+    Generates an interactive Plotly plot for V^T P V convergence.
     """
     try:
         vtpv_values = final_results.get("VTPV_values", [])
+        print(vtpv_values)
         if not vtpv_values:
             return None
-        else:
-            fig_vtpv, ax_vtpv = plt.subplots(figsize=(8, 5))
-            ax_vtpv.plot(range(1, len(vtpv_values) + 1), vtpv_values, marker="o", linestyle="-", color="b")
-            ax_vtpv.set_xlabel("Iteration")
-            ax_vtpv.set_ylabel("V^T P V")
-            ax_vtpv.set_title("Convergence of V^T P V")
-            ax_vtpv.grid(True)
 
-            buf = io.BytesIO()
-            fig_vtpv.savefig(buf, format="png")
-            buf.seek(0)
-            return buf
+        iterations = list(range(1, len(vtpv_values) + 1))
+        fig = go.Figure(data=go.Scatter(
+            x=iterations,
+            y=vtpv_values,
+            mode='lines+markers',
+            hovertemplate='Iteration: %{x}<br>VTPV: %{y:.6f}<extra></extra>'
+        ))
+        fig.update_layout(
+            title="Convergence of V<sup>T</sup>PV",
+            xaxis_title="Iteration",
+            yaxis_title="V<sup>T</sup>PV",
+        )
+        return fig
     except Exception as e:
-        print(f"Error generating VTPV plot: {e}")
+        print(f"Error generating interactive V<sup>T</sup>PV plot: {e}")
         return None
