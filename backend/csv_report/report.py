@@ -9,7 +9,7 @@ import matplotlib.figure
 import os
 import plotly.graph_objects as go
 
-def format_matrix_for_report(matrix, max_rows=30, max_cols=11):
+def format_matrix_for_report(matrix, max_rows=30, max_cols=14):
     """
     Formats a large matrix for display in a report by truncating it and
     applying scientific notation with 3-digit precision.
