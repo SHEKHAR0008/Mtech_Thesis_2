@@ -1,0 +1,28 @@
+From      To       Parameter   Value       Var/Cov_1      Var/Cov_2      Var/Cov_3
+Crucesair USPA     del_x       15752.080   6.321492E-06
+Crucesair USPA     del_y       -5179.102   1.545948E-05   4.739877E-05
+Crucesair USPA     del_z       -903.089    -1.061303E-05  -3.184780E-05 2.388036E-05
+
+USPA      USPB     del_x       14.964      1.412453E-06
+USPA      USPB     del_y       -15.365     1.285418E-06   4.653209E-06
+USPA      USPB     del_z       -16.664     -5.669127E-07  -1.658118E-06 1.872469E-06
+
+USPA      Pseudo   del_x       -528.036    9.505016E-08
+USPA      Pseudo   del_y       560.657     8.957064E-08   3.723939E-07
+USPA      Pseudo   del_z       585.897     -5.022282E-08  -2.221975E-07 3.363763E-07
+
+USPB      Reilly   del_x       -514.003    3.650165E-07
+USPB      Reilly   del_y       741.438     9.024127E-07   2.796189E-06
+USPB      Reilly   del_z       868.293     -6.189027E-07  -1.881145E-06 1.410196E-06
+
+Bromilow  Reilly   del_x       32.134      2.762550E-07
+Bromilow  Reilly   del_y       51.175      3.200312E-07   6.870455E-07
+Bromilow  Reilly   del_z       94.198      -2.008940E-07  -4.006259E-07 4.661596E-07
+
+Pseudo    Reilly   del_x       29.000      1.325760E-07
+Pseudo    Reilly   del_y       165.422     1.317165E-07   5.265054E-07
+Pseudo    Reilly   del_z       265.719     -7.253348E-08  -3.020965E-07 5.006575E-07
+
+Bromilow  Pseudo   del_x       3.136       3.367818E-07
+Bromilow  Pseudo   del_y       -114.242    3.937476E-07   8.766570E-07
+Bromilow  Pseudo   del_z       -171.527    -5.186521E-07  -8.977932E-07 1.446501E-06
