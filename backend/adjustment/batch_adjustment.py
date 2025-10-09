@@ -16,7 +16,7 @@ def batch_adjustment(
         apriori_reference_var=1,
         max_iterations=10,
         tolerance=1e-9,
-        constraint_type="No Constraint"
+        constraint_type="Free Net Adjustment"
 ):
     """
     Computes the results of the non-linear observation equation method using iterative least squares.
@@ -32,8 +32,8 @@ def batch_adjustment(
         apriori_reference_var (float, optional): The apriori reference variance. Defaults to 1.
         max_iterations (int, optional): The maximum number of iterations. Defaults to 10.
         tolerance (float, optional): The tolerance for convergence. Defaults to 1e-9.
-        constraint_type (str, optional): The type of constraint applied ("No Constraint", "Hard Constraint", "Soft Constraint").
-                                        Defaults to "No Constraint".
+        constraint_type (str, optional): The type of constraint applied ("Free Net Adjustment", "Hard Constraint", "Soft Constraint").
+                                        Defaults to "Free Net Adjustment".
 
     Returns:
         tuple: A tuple containing:
@@ -54,7 +54,7 @@ def batch_adjustment(
     L = L_observed - L_not
 
     # Determine if pseudo-inverse should be forced based on constraint type
-    force_pinv_flag = (constraint_type == "No Constraint")
+    force_pinv_flag = (constraint_type == "Free Net Adjustment")
     for iteration in range(max_iterations):
         A = sp.Matrix([[obs.diff(param) for param in params_symbols] for obs in observations_eq])
         A_evaluated = np.array(A.subs({**values, **constants}).evalf(), dtype=np.float64)
@@ -137,6 +137,6 @@ def batch_adjustment(
         "Sigma_X_hat_Aposteriori": sigma_x_hat_aposteriori, "Iterations": iteration + 1,
         "First Check Passed V.T@P@V = -V.T@P@L": first_check,
         "Second Check Passed A.T@P@V = 0": second_check, "DOF": dof, "PARAMS_Name": params_symbols,
-        "Constant": constants, "Labels": labels, "VTPV_values": vtpv_values,
+        "Constant": constants, "Labels": labels, "VTPV_values": vtpv_values,"Sigma_L_Observed":P_inv
     }
     return final_results, vtpv_values,Warning

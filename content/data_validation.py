@@ -82,19 +82,23 @@ def run_validation_logic(threshold, go_next=False):
     """
     Helper function to perform the validation logic and update state.
     """
-    try:
-        st.session_state.baseline_list, st.session_state.unq_stations = parse_baseline_text(st.session_state.baseline_text)
-        ok, msg, _ = check_all_loops(st.session_state.baseline_list, threshold=threshold, dimension = st.session_state.dimension)
-        st.session_state.loop_ok = ok
-        st.session_state.loop_msg = msg
-        st.session_state["steps_done"]["Data validation"] = True
-        st.session_state.viewed_results = True
-        if go_next:
-            st.session_state.current_step = "adjustment"
-            st.session_state.viewed_results = False
-        st.rerun()
-    except Exception as e:
-        st.error(f"Validation failed: {e}")
-        st.session_state.loop_ok = False
-        st.session_state.loop_msg = f"Validation failed: {e}"
-        st.session_state["steps_done"]["Data validation"] = False
+    # --- ADDED: Spinner for user feedback during validation ---
+    with st.spinner("🔍 Validating baseline data and checking loops..."):
+        try:
+            st.session_state.baseline_list, st.session_state.unq_stations = parse_baseline_text(st.session_state.baseline_text)
+            ok, msg, _ = check_all_loops(st.session_state.baseline_list, threshold=threshold, dimension = st.session_state.dimension)
+            st.session_state.loop_ok = ok
+            st.session_state.loop_msg = msg
+            st.session_state["steps_done"]["Data validation"] = True
+            st.session_state.viewed_results = True
+            if go_next:
+                st.session_state.current_step = "adjustment"
+                st.session_state.viewed_results = False
+            st.rerun()
+        except Exception as e:
+            st.error(f"Validation failed: {e}")
+            st.session_state.loop_ok = False
+            st.session_state.loop_msg = f"Validation failed: {e}"
+            st.session_state["steps_done"]["Data validation"] = False
+            # --- ADDED: Rerun on failure to update the UI immediately ---
+            st.rerun()

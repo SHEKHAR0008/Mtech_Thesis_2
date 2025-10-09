@@ -129,6 +129,7 @@ def iterative_outlier_detection(initial_result, rejection_level, labels, params,
             "Sigma_X_hat_Apriori": sigma_x_hat_adj_apriori,
             "Sigma_X_hat_Aposteriori": sigma_x_hat_adj_aposteriori, "DOF": new_dof,
             "PARAMS_Name": curr_result["PARAMS_Name"], "Constant": constants, "Labels": list(curr_labels),
+            "Sigma_L_Observed":safe_inverse(new_P)
         }
 
         outlier_detection_results.append(iteration_results)

@@ -8,6 +8,8 @@ def export_adjustment_results_excel(
         blunder_detection_method,
         alpha,
         beta_power,
+        initial_geodetic_params,
+        final_geodetic_params,
         rejection_level=3.0,
         geodetic_coords=None,
         initial_results=None
@@ -41,7 +43,7 @@ def export_adjustment_results_excel(
     L_adj = np.array(report_source.get("L Adjusted", []), dtype=float).flatten()
     sigma_VV = np.array(report_source.get("Sigma_VV", np.zeros((len(V), len(V)))), dtype=float)
     sigma_L_adj = np.array(report_source.get("Sigma L Adjusted", np.zeros((len(L_adj), len(L_adj)))), dtype=float)
-    sigma_L = np.array(report_source.get("Sigma_L", np.zeros((len(L_obs), len(L_obs)))), dtype=float)
+    sigma_L = np.array(report_source.get("Sigma_L_Observed", np.zeros((len(L_obs), len(L_obs)))), dtype=float)
 
     # Use np.abs() to prevent sqrt of small negative numbers from numerical instability
     sigma_Lb = np.sqrt(np.abs(np.diag(sigma_L)))
@@ -85,23 +87,39 @@ def export_adjustment_results_excel(
     else:
         df_all_params = df_params
 
-    # Add geodetic coordinate columns, ensuring they exist even if empty
+    # Initialize columns with a flexible 'object' dtype instead of a numeric one.
+    df_all_params["Geodetic Coord"] = pd.Series(dtype='object')
+    df_all_params["Geodetic SD"] = pd.Series(dtype='object')
 
-    df_all_params["Geodetic Coord"] = np.nan
-    df_all_params["Geodetic SD"] = np.nan
+    # Get unique station names from the parameters
+    stations = sorted(list(set(p.split('_')[1] for p in Params_name if '_' in p)))
 
-    if geodetic_coords:  # Only populate if the list is not empty
-        if len(geodetic_coords) == len(Params_name):
-            try:
-                coord_map = {name: gc[0] for name, gc in zip(Params_name, geodetic_coords)}
-                sd_map = {name: gc[1] for name, gc in zip(Params_name, geodetic_coords)}
-                df_all_params["Geodetic Coord"] = df_all_params["Parameter"].map(coord_map)
-                df_all_params["Geodetic SD"] = df_all_params["Parameter"].map(sd_map)
-            except (IndexError, TypeError):
-                print("Warning: Geodetic coordinates list is malformed. Columns will remain empty.")
-        else:
-            print(f"Warning: Mismatch in length of parameters and geodetic coordinates. Columns will remain empty.")
+    for station in stations:
+        # Check if geodetic data exists for the station
+        if station in final_geodetic_params and final_geodetic_params[station]:
+            final_geo = final_geodetic_params[station]
 
+            # Create a clean, readable string for the coordinates
+            geodetic_string = {"X":f"Lat: {final_geo['phi'][0]}",
+                               "Y":f"Lon: {final_geo['lambda'][0]}",
+                               "Z":f"Hgt: {final_geo['h'][0]}"}
+
+            # Create a clean, readable string for the standard deviations
+            sd_string = {"X":f"dLat: {final_geo['phi'][1]}",
+                         "Y":f"dLon: {final_geo['lambda'][1]}",
+                         "Z":f"dHgt: {final_geo['h'][1]}"}
+
+            # Assign the strings to the correct rows in the DataFrame
+            for coord in ['X', 'Y', 'Z']:
+                param_name = f"{coord}_{station}"
+                # Use .isin() for robust checking
+                if df_all_params["Parameter"].isin([param_name]).any():
+                    df_all_params.loc[df_all_params["Parameter"] == param_name, "Geodetic Coord"] = geodetic_string[coord]
+                    df_all_params.loc[df_all_params["Parameter"] == param_name, "Geodetic SD"] = sd_string[coord]
+
+    # Fill any remaining empty cells in these columns to avoid issues
+    df_all_params["Geodetic Coord"].fillna("", inplace=True)
+    df_all_params["Geodetic SD"].fillna("", inplace=True)
     # --- 3. Write DataFrames to In-Memory Excel Files ---
     obs_buffer, param_buffer = BytesIO(), BytesIO()
     removed_indices = {res['removed_index'] for res in outlier_results} if outlier_results else set()
@@ -134,11 +152,11 @@ def export_adjustment_results_excel(
         worksheet.write(last_row, 0, "Outlier Detection Summary", header_format)
         worksheet.write(last_row + 1, 0, "Detection Method:", bold_format)
         worksheet.write(last_row + 1, 1, blunder_detection_method)
+        worksheet.write(last_row + 2, 0, "Significance Level (α):", bold_format)
+        worksheet.write(last_row + 2, 1, alpha)
+        worksheet.write(last_row + 3, 0, "Power of Test (1-β):", bold_format)
+        worksheet.write(last_row + 3, 1, beta_power)
         if blunder_detection_method != "None":
-            worksheet.write(last_row + 2, 0, "Significance Level (α):", bold_format)
-            worksheet.write(last_row + 2, 1, alpha)
-            worksheet.write(last_row + 3, 0, "Power of Test (1-β):", bold_format)
-            worksheet.write(last_row + 3, 1, beta_power)
             worksheet.write(last_row + 4, 0, "Total Outliers Detected:", bold_format)
             worksheet.write(last_row + 4, 1, len(removed_indices))
             if outlier_results:
@@ -169,11 +187,11 @@ def export_adjustment_results_excel(
         worksheet.write(last_row, 0, "Outlier Detection Summary", header_format)
         worksheet.write(last_row + 1, 0, "Detection Method:", bold_format)
         worksheet.write(last_row + 1, 1, blunder_detection_method)
+        worksheet.write(last_row + 2, 0, "Significance Level (α):", bold_format)
+        worksheet.write(last_row + 2, 1, alpha)
+        worksheet.write(last_row + 3, 0, "Power of Test (1-β):", bold_format)
+        worksheet.write(last_row + 3, 1, beta_power)
         if blunder_detection_method != "None":
-            worksheet.write(last_row + 2, 0, "Significance Level (α):", bold_format)
-            worksheet.write(last_row + 2, 1, alpha)
-            worksheet.write(last_row + 3, 0, "Power of Test (1-β):", bold_format)
-            worksheet.write(last_row + 3, 1, beta_power)
             worksheet.write(last_row + 4, 0, "Total Outliers Detected:", bold_format)
             worksheet.write(last_row + 4, 1, len(removed_indices))
 

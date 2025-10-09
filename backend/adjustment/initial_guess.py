@@ -60,7 +60,7 @@ def initial_guess(
         coords[sta].append(tuple(map(float, data["value"])))
         seed_points.add(sta)
 
-    # If no constraints, pick a reference point and place it at the origin
+    # If Free Net Adjustments, pick a reference point and place it at the origin
     if not seed_points:
         if reference is None:
             # Pick the first station from the first baseline as a default reference
@@ -197,7 +197,7 @@ def initial_guess(
 #         'P2': sympy.symbols('X_2 Y_2 Z_2'),
 #     }
 #
-#     # No constraints, will use 'P1' as reference at origin (0,0,0)
+#     # Free Net Adjustments, will use 'P1' as reference at origin (0,0,0)
 #     vals, xhat, consts, new_p = initial_guess(
 #         baselines=baselines_3d,
 #         params=params_3d,

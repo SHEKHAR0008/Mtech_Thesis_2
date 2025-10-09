@@ -33,8 +33,14 @@
             padding-bottom: 5px;
             margin-top: 25px;
         }
-        h1 { font-size: 24pt; }
-        h2 { font-size: 18pt; }
+        h1 {
+            font-size: 24pt;
+            page-break-before: always;
+        }
+        h2 {
+            font-size: 18pt;
+            page-break-before: always;
+        }
         h3 { font-size: 14pt; }
         table {
             width: 100%;
@@ -68,7 +74,7 @@
 
         .wide-pre {
             white-space: pre; /* Prevent wrapping for matrices */
-            font-size: 8pt;   /* Smaller font to fit more data */
+            font-size: 7pt;   /* Smaller font to fit more data */
         }
 
         /* Class to apply the landscape page and force a page break */
@@ -313,7 +319,7 @@
                             {% if ellipse.stats.type == "2D" %}
                                 <tr><td>Semi-major axis (a)</td><td>{{ "%.6f"|format(ellipse.stats.a) }}</td></tr>
                                 <tr><td>Semi-minor axis (b)</td><td>{{ "%.6f"|format(ellipse.stats.b) }}</td></tr>
-                                <tr><td>Orientation (&theta;)</td><td>{{ "%.4f"|format(ellipse.stats.theta_deg) }}°</td></tr>
+                                <tr><td>Orientation (&theta;)</td><td>{{ "%.4f"|format(ellipse.stats.azimuth_deg) }}°</td></tr>
                             {% elif ellipse.stats.type == "3D" %}
                                 <tr><td>Radii (a, b, c)</td><td>{{ ellipse.stats.radii | map('round', 6) | list | join(', ') }}</td></tr>
                             {% endif %}

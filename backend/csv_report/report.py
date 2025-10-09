@@ -34,7 +34,7 @@ def format_matrix_for_report(matrix, max_rows=30, max_cols=14):
 
     # If the matrix is small enough, format it and return directly
     if n_rows <= max_rows and n_cols <= max_cols:
-        return df.applymap(formatter).to_string()
+        return df.map(formatter).to_string()
 
     # --- Truncate Rows if necessary ---
     if n_rows > max_rows:
@@ -62,7 +62,7 @@ def format_matrix_for_report(matrix, max_rows=30, max_cols=14):
         df_final = df
 
     # Apply the number formatting to the final, potentially truncated DataFrame
-    return df_final.applymap(formatter).to_string()
+    return df_final.map(formatter).to_string()
 
 
 def image_to_base64(img_obj, fmt="png"):
@@ -88,6 +88,10 @@ def generate_adjustment_report_html_pdf(
         final_results,
         template_full_path,
         adjustment_dimension,
+        initial_geodetic_params,
+        final_geodetic_params,
+        values,
+        constants,
         hard_constraints=None, soft_constraints=None, vtpv_graph=None,
         chi_graph=None, weight_type=None, adjust_method="Batch Adjustment",
         blunder_test=None, alpha=None, beta=None, initial_results=None,
@@ -168,7 +172,7 @@ def generate_adjustment_report_html_pdf(
         V = np.array(final_results.get("Residuals", []), dtype=float).flatten()
         L_adj = np.array(final_results.get("L Adjusted", []), dtype=float).flatten()
 
-        Sigma_L = np.array(final_results.get("Sigma_L", np.zeros((num_obs, num_obs))), dtype=float)
+        Sigma_L = np.array(final_results.get("Sigma_L_Observed", np.zeros((num_obs, num_obs))), dtype=float)
         Sigma_VV = np.array(final_results.get("Sigma_VV", np.zeros((num_obs, num_obs))), dtype=float)
         sigma_Lb = np.sqrt(np.abs(np.diag(Sigma_L)))
         sigma_Vhat = np.sqrt(np.abs(np.diag(Sigma_VV)))
@@ -199,48 +203,83 @@ def generate_adjustment_report_html_pdf(
         ]
         observation_equations_str = "\n".join(obs_eq_formatted)
 
-        # --- STATION PARAMETER LOGIC (Dimension Agnostic) ---
-        # This logic works for 1D, 2D, or 3D because it only populates the data
-        # that is present in the `param_names` list. The template then decides what to display.
+        # --- STATION PARAMETER LOGIC (Handles Fixed and Unknown Stations) ---
         param_names = [str(p) for p in final_results.get("PARAMS_Name", [])]
         X_hat_final = np.array(final_results.get("X Hat (Final)", [])).flatten()
-        Sigma_X_hat = np.array(final_results.get("Sigma_X_hat_Aposteriori", np.zeros((num_params, num_params))))
+        Sigma_X_hat = np.array(
+            final_results.get("Sigma_X_hat_Aposteriori", np.zeros((len(param_names), len(param_names)))))
         sigma_Xhat = np.sqrt(np.abs(np.diag(Sigma_X_hat)))
+
+        # Create a map for efficient index lookups to avoid nested loops
+        param_to_index = {name: i for i, name in enumerate(param_names)}
+
+        # Get a unique, sorted list of all station names from both unknown and fixed params
+        unknown_stations = {p.split('_')[1] for p in param_names if '_' in p}
+        fixed_stations = {c.split('_')[1] for c in constants if '_' in c}
+        all_stations = sorted(list(unknown_stations.union(fixed_stations)))
+
         station_map = {}
-        for i, param_name in enumerate(param_names):
-            # For 1D, param_name might be "Z_STN1" or just "STN1"
-            parts = param_name.split("_", 1)
-            if len(parts) == 2:
-                coord, station_name = parts
-            else:  # Assumes 1D parameter name is the station name itself
-                coord, station_name = "Z", param_name
-
-            if station_name not in station_map:
-                station_map[station_name] = {
-                    "name": station_name,
-                    "cartesian": {"X": {}, "Y": {}, "Z": {}},
-                    "geodetic": {"lambda": {}, "phi": {}, "h": {}},
-                }
-
-            initial_val_raw = initial_results.get(param_name, "") if initial_results else ""
-            initial_val_str = ""
-            if isinstance(initial_val_raw, (int, float)):
-                initial_val_str = f"{initial_val_raw:.6f}"
-            elif isinstance(initial_val_raw, (list, np.ndarray)) and len(initial_val_raw) > 0:
-                initial_val_str = f"{initial_val_raw[0]:.6f}"
-
-            param_data = {
-                "initial": initial_val_str,
-                "final": f"{X_hat_final[i]:.6f}",
-                "sd": f"{sigma_Xhat[i]:.6f}"
+        for station in all_stations:
+            station_map[station] = {
+                "name": station,
+                "cartesian": {"X": {}, "Y": {}, "Z": {}},
+                "geodetic": {"lambda": {}, "phi": {}, "h": {}},
             }
 
-            coord_upper = coord.upper()
-            if coord_upper in ["X", "Y", "Z"]:
-                station_map[station_name]["cartesian"][coord_upper] = param_data
-            elif coord.lower() in ["lambda", "phi", "h", "height"]:
-                key = "h" if coord.lower() == "height" else coord.lower()
-                station_map[station_name]["geodetic"][key] = param_data
+            sym_x, sym_y, sym_z = f"X_{station}", f"Y_{station}", f"Z_{station}"
+
+            # Check if the station is a fixed constant
+            if station in fixed_stations:
+                # Populate Cartesian data for FIXED stations
+                station_map[station]["cartesian"]["X"] = {"initial": f"{constants.get(sym_x, 0):.6f}", "final": "FIXED",
+                                                          "sd": "FIXED"}
+                station_map[station]["cartesian"]["Y"] = {"initial": f"{constants.get(sym_y, 0):.6f}", "final": "FIXED",
+                                                          "sd": "FIXED"}
+                station_map[station]["cartesian"]["Z"] = {"initial": f"{constants.get(sym_z, 0):.6f}", "final": "FIXED",
+                                                          "sd": "FIXED"}
+
+                # Populate Geodetic data for FIXED stations
+                final_geo = final_geodetic_params.get(station, {})
+                initial_geo = initial_geodetic_params.get(station, {})
+                station_map[station]["geodetic"]["phi"] = {"initial": initial_geo.get("phi", "N/A"), "final": "FIXED",
+                                                           "sd": "FIXED"}
+                station_map[station]["geodetic"]["lambda"] = {"initial": initial_geo.get("lambda", "N/A"),
+                                                              "final": "FIXED", "sd": "FIXED"}
+                station_map[station]["geodetic"]["h"] = {"initial": initial_geo.get("h", "N/A"), "final": "FIXED",
+                                                         "sd": "FIXED"}
+
+            else:  # The station is an unknown parameter
+                # Populate Cartesian data for UNKNOWN stations
+                for coord_letter, sym in [("X", sym_x), ("Y", sym_y), ("Z", sym_z)]:
+                    if sym in param_to_index:
+                        idx = param_to_index[sym]
+                        station_map[station]["cartesian"][coord_letter] = {
+                            "initial": f"{values.get(sym, 0):.6f}",
+                            "final": f"{X_hat_final[idx]:.6f}",
+                            "sd": f"{sigma_Xhat[idx]:.6f}"
+                        }
+
+                # Populate Geodetic data for UNKNOWN stations
+                if station in final_geodetic_params and final_geodetic_params[station]:
+                    final_geo = final_geodetic_params[station]
+                    initial_geo = initial_geodetic_params.get(station, {})
+
+                    station_map[station]["geodetic"]["phi"] = {
+                        "initial": initial_geo.get("phi", "N/A"),
+                        "final": final_geo.get("phi", ("N/A",))[0],
+                        "sd": final_geo.get("phi", ("", "N/A"))[1]
+                    }
+                    station_map[station]["geodetic"]["lambda"] = {
+                        "initial": initial_geo.get("lambda", "N/A"),
+                        "final": final_geo.get("lambda", ("N/A",))[0],
+                        "sd": final_geo.get("lambda", ("", "N/A"))[1]
+                    }
+                    station_map[station]["geodetic"]["h"] = {
+                        "initial": initial_geo.get("h", "N/A"),
+                        "final": final_geo.get("h", ("N/A",))[0],
+                        "sd": final_geo.get("h", ("", "N/A"))[1]
+                    }
+
         stations = list(station_map.values())
 
         # Process error ellipse plots provided as input
